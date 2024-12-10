@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
             ],
             builder: (context, item, isHovered, index, hoveredIndex, proximityScale) {
               final matrix = Functions.calculateMatrix(index, hoveredIndex, isHovered);
-              final hoveredMargin = isHovered ? const EdgeInsets.only(right: 6, left: 6, top: 0, bottom: 3) : const EdgeInsets.all(6);
+              final hoveredMargin = isHovered ? const EdgeInsets.only(right: 6, left: 6, top: 0, bottom: 0) : const EdgeInsets.all(6);
               return AnimatedContainer(
                 transform: matrix,
                 curve: Curves.easeOut,
@@ -94,12 +94,21 @@ class _DockState<T extends Object> extends State<Dock<T>> {
 
           final childWhenDraggingWidget = _isOutsideDock(context)
               ? const AnimatedSize(
-                  duration: Duration(milliseconds: 200),
-                  reverseDuration: Duration(milliseconds: 200),
+                  duration: Duration(milliseconds: 300),
+                  reverseDuration: Duration(milliseconds: 300),
                   curve: Curves.easeInOut,
-                  child: SizedBox.shrink(),
+                  child: AnimatedOpacity(
+                    duration: Duration(milliseconds: 300),
+                    opacity: 0.0,
+                    child: SizedBox.shrink(),
+                  ),
                 )
-              : const SizedBox(height: 56, width: 64);
+              : const AnimatedSize(
+                  duration: Duration(milliseconds: 300),
+                  reverseDuration: Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  child: SizedBox(height: 56, width: 64),
+                );
 
           return Draggable<T>(
             data: item,
@@ -128,7 +137,9 @@ class _DockState<T extends Object> extends State<Dock<T>> {
   }
 
   void onDragStartedDo(T item) {
-    setState(() => _hoveredItem = item);
+    setState(() {
+      _hoveredItem = item;
+    });
   }
 
   void onDraggableCancelledDo() {
