@@ -13,6 +13,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
+        backgroundColor: Colors.black12,
         body: Center(
           child: Dock(
             items: const [
@@ -24,24 +25,20 @@ class MyApp extends StatelessWidget {
             ],
             builder: (context, item, isHovered, index, hoveredIndex, proximityScale) {
               final matrix = Functions.calculateMatrix(index, hoveredIndex, isHovered);
+              final hoveredMargin = isHovered ? const EdgeInsets.only(right: 6, left: 6, top: 0, bottom: 3) : const EdgeInsets.all(6);
               return AnimatedContainer(
                 transform: matrix,
                 curve: Curves.easeOut,
-                margin: const EdgeInsets.all(8),
-                duration: const Duration(milliseconds: 200),
-                height: isHovered ? (48 + proximityScale * 16) : 48,
-                constraints: BoxConstraints(minWidth: isHovered ? (48 + proximityScale * 16) : 48),
+                margin: hoveredMargin,
+                duration: const Duration(milliseconds: 150),
+                height: 48,
+                constraints: BoxConstraints(minWidth: isHovered ? (48 + proximityScale * 4) : 48),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8),
                   color: Colors.primaries[item.hashCode % Colors.primaries.length],
-                  boxShadow: [
-                    isHovered
-                        ? const BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 4))
-                        : const BoxShadow(color: Colors.transparent),
-                  ],
                 ),
                 child: Center(
-                  child: Icon(item, color: Colors.white, size: isHovered ? (24 + proximityScale * 16) : 24),
+                  child: Icon(item, color: Colors.white, size: isHovered ? (24 + proximityScale * 4) : 24),
                 ),
               );
             },
@@ -78,6 +75,7 @@ class _DockState<T extends Object> extends State<Dock<T>> {
   /// Hovered [T] item and its index.
   T? _hoveredItem;
   int? _hoveredIndex;
+  Offset? _draggedOffset;
 
   @override
   Widget build(BuildContext context) {
@@ -94,12 +92,22 @@ class _DockState<T extends Object> extends State<Dock<T>> {
           final item = entry.value;
           final proximityScale = Functions.calculateScale(index, _hoveredIndex);
 
+          final childWhenDraggingWidget = _isOutsideDock(context)
+              ? const AnimatedSize(
+                  duration: Duration(milliseconds: 200),
+                  reverseDuration: Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  child: SizedBox.shrink(),
+                )
+              : const SizedBox(height: 56, width: 64);
+
           return Draggable<T>(
             data: item,
             feedback: widget.builder(context, item, true, index, _hoveredIndex ?? -1, proximityScale),
-            childWhenDragging: const SizedBox.shrink(),
+            childWhenDragging: childWhenDraggingWidget,
             onDragStarted: () => onDragStartedDo(item),
             onDraggableCanceled: (_, __) => onDraggableCancelledDo(),
+            onDragUpdate: (details) => setState(() => _draggedOffset = details.globalPosition),
             onDragEnd: (details) => onDragEndDo(details, index, item),
             child: MouseRegion(
               onEnter: (_) => onEnterDo(index, item),
@@ -112,12 +120,22 @@ class _DockState<T extends Object> extends State<Dock<T>> {
     );
   }
 
+  bool _isOutsideDock(BuildContext context) {
+    if (_draggedOffset == null) return false;
+    final renderBox = context.findRenderObject() as RenderBox;
+    final dockBounds = renderBox.localToGlobal(Offset.zero) & renderBox.size;
+    return !dockBounds.contains(_draggedOffset!);
+  }
+
   void onDragStartedDo(T item) {
     setState(() => _hoveredItem = item);
   }
 
   void onDraggableCancelledDo() {
-    setState(() => _hoveredItem = null);
+    setState(() {
+      _hoveredItem = null;
+      _draggedOffset = null;
+    });
   }
 
   void onDragEndDo(DraggableDetails details, int index, T item) {
@@ -128,7 +146,10 @@ class _DockState<T extends Object> extends State<Dock<T>> {
         _items.insert(newIndex, item);
       });
     }
-    setState(() => _hoveredItem = null);
+    setState(() {
+      _hoveredItem = null;
+      _draggedOffset = null;
+    });
   }
 
   void onEnterDo(int index, T item) {
@@ -148,19 +169,24 @@ class _DockState<T extends Object> extends State<Dock<T>> {
 
 abstract class Functions {
   /// Calculates the transformation matrix for an item based on its index
-  static Matrix4 calculateMatrix(int index, hoveredIndex, isHovered) {
-    final hoveredMatrix = Matrix4.identity()..translate(0.0, -10.0, 0.0);
-    final nearMatrix = Matrix4.identity()..translate(0.0, -5.0, 0.0);
+  static Matrix4 calculateMatrix(int index, int? hoveredIndex, bool isHovered) {
+    final hoveredMatrix = Matrix4.identity()..translate(0.0, -8.0, 0.0);
+    final nearMatrix = Matrix4.identity()..translate(0.0, -6.0, 0.0);
+    final farMatrix = Matrix4.identity()..translate(0.0, -4.0, 0.0);
     final defaultMatrix = Matrix4.identity()..translate(0.0, 0.0, 0.0);
+
+    if (hoveredIndex == null || hoveredIndex == -1) {
+      return defaultMatrix;
+    }
 
     Matrix4 transformMatrix = defaultMatrix;
 
-    if (index == 0 && !isHovered) {
-      transformMatrix = defaultMatrix;
-    } else if (isHovered) {
+    if (isHovered && index == hoveredIndex) {
       transformMatrix = hoveredMatrix;
     } else if ((index == hoveredIndex - 1) || (index == hoveredIndex + 1)) {
       transformMatrix = nearMatrix;
+    } else if ((index == hoveredIndex - 2) || (index == hoveredIndex + 2)) {
+      transformMatrix = farMatrix;
     }
 
     return transformMatrix;
@@ -168,7 +194,7 @@ abstract class Functions {
 
   /// Computes the scale factor for an item based on its distance from the hovered item
   static double calculateScale(int index, int? hoveredIndex) {
-    if (hoveredIndex == null) return 0.0;
+    if (hoveredIndex == null || hoveredIndex == -1) return 0.0;
 
     final distance = (index - hoveredIndex).abs();
     if (distance > 2) return 0.0; // Limit scaling to 2 items away
